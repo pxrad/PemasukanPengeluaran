@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Buku Kas — Ringkasan Aset</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#161d1b; --paper:#f2efe6; --panel:#1e2925; --panel2:#25332e;
+    --gold:#c9a227; --teal:#3e6259; --teal-light:#6b9a8d;
+    --line:#3a4842; --danger:#b3543f; --good:#7fa87a;
+    --mono: 'Courier New', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  body{margin:0;background:var(--ink);color:var(--paper);font-family:Georgia,'Times New Roman',serif;line-height:1.4;
+    padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+    -webkit-text-size-adjust:100%;}
+  header{padding:28px 20px 14px;border-bottom:1px solid var(--line);}
+  header h1{margin:0 0 4px;font-size:1.5rem;font-weight:600;letter-spacing:.2px;}
+  header p{margin:0;color:var(--teal-light);font-family:Arial,sans-serif;font-size:.85rem;}
+  main{max-width:640px;margin:0 auto;padding:16px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px;}
+  .total-label{font-family:Arial,sans-serif;color:var(--teal-light);font-size:.8rem;text-transform:none;}
+  .total-value{font-family:var(--mono);font-size:2rem;color:var(--gold);margin:4px 0 0;font-weight:bold;}
+  #chartWrap{position:relative;max-width:280px;margin:14px auto 6px;}
+  #assetList{list-style:none;margin:14px 0 0;padding:0;font-family:Arial,sans-serif;font-size:.9rem;}
+  #assetList li{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer;}
+  #assetList li:last-child{border-bottom:none;}
+  #assetList .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;}
+  #assetList .val{font-family:var(--mono);color:var(--paper);}
+  h2{font-size:1.05rem;margin:0 0 12px;color:var(--gold);font-weight:600;}
+  .tabs{display:flex;gap:8px;margin-bottom:14px;font-family:Arial,sans-serif;}
+  .tabs button{flex:1;padding:9px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--paper);font-size:.85rem;cursor:pointer;}
+  .tabs button.active{background:var(--teal);border-color:var(--teal);color:#fff;}
+  form{display:flex;flex-direction:column;gap:10px;font-family:Arial,sans-serif;}
+  label{font-size:.8rem;color:var(--teal-light);}
+  input,select{background:var(--panel2);border:1px solid var(--line);color:var(--paper);padding:11px 10px;border-radius:7px;font-size:16px;font-family:Arial,sans-serif;width:100%;}
+  .seg{display:flex;gap:8px;}
+  .seg button{flex:1;padding:12px 9px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);color:var(--paper);cursor:pointer;font-family:Arial,sans-serif;font-size:.9rem;}
+  .seg button.on.masuk{background:var(--good);border-color:var(--good);color:#0c1a12;}
+  .seg button.on.keluar{background:var(--danger);border-color:var(--danger);color:#fff;}
+  .submit{background:var(--gold);color:#1c1305;border:none;padding:13px;border-radius:7px;font-weight:bold;cursor:pointer;font-family:Arial,sans-serif;margin-top:4px;font-size:.95rem;width:100%;}
+  @media (max-width:480px){
+    .edit-grid{grid-template-columns:1fr;}
+    .tabs{flex-wrap:wrap;}
+    .tabs button{flex:1 1 45%;font-size:.8rem;padding:10px 6px;}
+    header{padding:20px 16px 12px;}
+    header h1{font-size:1.3rem;}
+    .card{padding:14px;}
+    table{font-size:.76rem;}
+    th,td{padding:6px 3px;}
+  }
+  table{width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:.82rem;}
+  th,td{text-align:left;padding:7px 4px;border-bottom:1px solid var(--line);}
+  th{color:var(--teal-light);font-weight:normal;}
+  td.num{font-family:var(--mono);text-align:right;}
+  .masuk-tag{color:var(--good);} .keluar-tag{color:var(--danger);}
+  .edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  footer{max-width:640px;margin:0 auto;padding:8px 16px 40px;display:flex;gap:10px;font-family:Arial,sans-serif;font-size:.78rem;}
+  footer button{background:none;border:1px solid var(--line);color:var(--teal-light);padding:7px 12px;border-radius:7px;cursor:pointer;}
+  #importFile{display:none;}
+  .empty{color:var(--teal-light);font-family:Arial,sans-serif;font-size:.85rem;font-style:italic;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Buku Kas</h1>
+  <p>Ringkasan aset &amp; catatan transaksi harian</p>
+</header>
+
+<main>
+
+  <div class="card">
+    <div class="total-label">Total kekayaan</div>
+    <div class="total-value" id="totalValue">Rp 0</div>
+    <div id="chartWrap"><canvas id="assetChart"></canvas></div>
+    <ul id="assetList"></ul>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button data-tab="tx" class="active">Catat Transaksi</button>
+      <button data-tab="assets">Edit Aset</button>
+      <button data-tab="history">Riwayat</button>
+    </div>
+
+    <div id="tab-tx">
+      <h2>Tambah Pemasukan / Pengeluaran</h2>
+      <form id="txForm">
+        <div class="seg">
+          <button type="button" id="btnMasuk" class="on masuk">Pemasukan</button>
+          <button type="button" id="btnKeluar" class="keluar">Pengeluaran</button>
+        </div>
+        <div>
+          <label>User</label>
+          <select id="txUser">
+            <option>Saya</option><option>Papa</option><option>Mama</option>
+            <option>Koko</option><option>Cece</option><option>Adik</option>
+          </select>
+        </div>
+        <div>
+          <label>Tanggal</label>
+          <input type="date" id="txDate" required>
+        </div>
+        <div>
+          <label>Keterangan</label>
+          <input type="text" id="txDesc" placeholder="Contoh: Gaji, Makan siang, Gojek" required>
+        </div>
+        <div>
+          <label>Nominal (Rp)</label>
+          <input type="text" inputmode="numeric" id="txAmount" placeholder="0" required>
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="txStatus">
+            <option>Lunas</option><option>Pending</option>
+          </select>
+        </div>
+        <div class="empty">Kalau User = <b>Saya</b>, nominal ini juga menambah/mengurangi saldo Tabungan di dashboard.</div>
+        <button type="submit" class="submit">Simpan Transaksi</button>
+      </form>
+    </div>
+
+    <div id="tab-assets" style="display:none;">
+      <h2>Perbarui Nilai Aset</h2>
+      <form id="assetForm" class="edit-grid">
+        <div><label>Emas (Rp)</label><input type="text" inputmode="numeric" id="a_emas"></div>
+        <div><label>Deposito (Rp)</label><input type="text" inputmode="numeric" id="a_deposito"></div>
+        <div><label>Tabungan (Rp)</label><input type="text" inputmode="numeric" id="a_tabungan"></div>
+        <div><label>Saham (Rp)</label><input type="text" inputmode="numeric" id="a_saham"></div>
+        <div><label>Reksadana (Rp)</label><input type="text" inputmode="numeric" id="a_reksadana"></div>
+        <div><label>Reimburse Kantor (Rp)</label><input type="text" inputmode="numeric" id="a_reimburse"></div>
+        <div><label>Cash — M-Banking (Rp)</label><input type="text" inputmode="numeric" id="a_mbanking"></div>
+        <div><label>Cash — Tunai (Rp)</label><input type="text" inputmode="numeric" id="a_tunai"></div>
+        <button type="submit" class="submit" style="grid-column:1/-1;">Simpan Aset</button>
+      </form>
+    </div>
+
+    <div id="tab-history" style="display:none;">
+      <h2>Riwayat Transaksi (Google Sheet)</h2>
+      <button type="button" id="refreshHistory" class="submit" style="margin-bottom:12px;">Muat Ulang</button>
+      <div id="historyWrap"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Sinkronisasi Keluarga (Google Sheet)</h2>
+    <form id="syncForm" style="font-family:Arial,sans-serif;">
+      <label>URL Web App (sudah disetel, tidak perlu diisi ulang — hanya untuk ganti kalau perlu)</label>
+      <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      <button type="submit" class="submit">Simpan URL Baru</button>
+      <div class="empty" id="syncStatus" style="margin-top:8px;"></div>
+    </form>
+  </div>
+
+</main>
+
+<footer>
+  <button id="exportBtn">Ekspor cadangan (.json)</button>
+  <button id="importBtn">Impor cadangan</button>
+  <input type="file" id="importFile" accept="application/json">
+</footer>
+
+<script>
+const KEY='bukukas_data_v1';
+const CATS=[
+  {id:'emas',label:'Emas',color:'#c9a227'},
+  {id:'deposito',label:'Deposito',color:'#8a6d3b'},
+  {id:'tabungan',label:'Tabungan',color:'#3e6259'},
+  {id:'saham',label:'Saham',color:'#b3543f'},
+  {id:'reksadana',label:'Reksadana',color:'#6b9a8d'},
+  {id:'reimburse',label:'Reimburse Kantor',color:'#7a8f9a'},
+  {id:'mbanking',label:'Cash (M-Banking)',color:'#a9a15c'},
+  {id:'tunai',label:'Cash (Tunai)',color:'#7fa87a'}
+];
+
+function defaultData(){
+  return {
+    assets:{ emas:9150000, deposito:0, tabungan:82300000, saham:6297500,
+      reksadana:5129954, reimburse:1220000, mbanking:324473, tunai:2265000 },
+    transactions:[]
+  };
+}
+function load(){
+  try{ const raw=localStorage.getItem(KEY); return raw? JSON.parse(raw): defaultData(); }
+  catch(e){ return defaultData(); }
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(data)); }
+let data = load();
+
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_EIgRxjgtqE3biXKBb8LQCN7Iq61x2YBZDtNqIphuk4URyADupsN4PtnL57IaaTGkIvuTBPMUObQc/pub?gid=0&single=true&output=csv';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyDzadmFEXRBRvjfm4XNlObllEw7TO09jVZOAya-pUb_AN5lIQnlDnHwNnBr9jU0KRG/exec';
+const SCRIPT_KEY='bukukas_scripturl';
+function getScriptUrl(){ return localStorage.getItem(SCRIPT_KEY) || DEFAULT_SCRIPT_URL; }
+function setScriptUrl(u){ localStorage.setItem(SCRIPT_KEY,u); }
+
+// Parser CSV sederhana yang menghormati tanda kutip (mendukung koma di dalam teks)
+function parseCSV(text){
+  const rows=[]; let row=[]; let field=''; let inQuotes=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQuotes){
+      if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
+      else field+=c;
+    }else{
+      if(c==='"') inQuotes=true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c==='\r'){ /* ignore */ }
+      else field+=c;
+    }
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r=>r.some(f=>f.trim()!==''));
+}
+
+function rupiah(n){
+  return 'Rp ' + Math.round(n).toLocaleString('id-ID');
+}
+
+// Format input angka dengan titik ribuan ala "230.000" atau "324.473,87" sambil mengetik
+function parseNum(str){
+  if(!str) return 0;
+  const cleaned = String(str).replace(/\./g,'').replace(',', '.'); // hilangkan titik ribuan, koma jadi titik desimal
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+function formatThousands(el){
+  el.addEventListener('input', ()=>{
+    let val = el.value.replace(/[^0-9,]/g,''); // hanya izinkan digit dan koma
+    const commaIdx = val.indexOf(',');
+    let intPart = commaIdx===-1 ? val : val.slice(0,commaIdx);
+    let decPart = commaIdx===-1 ? null : val.slice(commaIdx+1).replace(/,/g,'').slice(0,2);
+    intPart = intPart.replace(/^0+(?=\d)/,'');
+    const formattedInt = intPart ? Number(intPart).toLocaleString('id-ID') : '';
+    el.value = decPart!==null ? formattedInt + ',' + decPart : formattedInt;
+  });
+}
+['txAmount','a_emas','a_deposito','a_tabungan','a_saham','a_reksadana','a_reimburse','a_mbanking','a_tunai']
+  .forEach(id=>{ const el=document.getElementById(id); if(el) formatThousands(el); });
+
+let chart;
+function renderDashboard(){
+  const total = CATS.reduce((s,c)=>s+Number(data.assets[c.id]||0),0);
+  document.getElementById('totalValue').textContent = rupiah(total);
+
+  const ctx = document.getElementById('assetChart');
+  const values = CATS.map(c=>Number(data.assets[c.id]||0));
+  const labels = CATS.map(c=>c.label);
+  const colors = CATS.map(c=>c.color);
+
+  if(chart) chart.destroy();
+  chart = new Chart(ctx,{
+    type:'doughnut',
+    data:{ labels, datasets:[{ data: values, backgroundColor: colors, borderColor:'#1e2925', borderWidth:2 }] },
+    options:{
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label: (ctx)=> ctx.label + ': ' + rupiah(ctx.raw) } }
+      },
+      cutout:'62%'
+    }
+  });
+
+  const list = document.getElementById('assetList');
+  list.innerHTML='';
+  CATS.forEach(c=>{
+    const li=document.createElement('li');
+    li.innerHTML = `<span><span class="dot" style="background:${c.color}"></span>${c.label}</span><span class="val">${rupiah(data.assets[c.id]||0)}</span>`;
+    list.appendChild(li);
+  });
+}
+
+function renderAssetForm(){
+  CATS.forEach(c=>{
+    const key = c.id==='mbanking'?'a_mbanking': c.id==='tunai'?'a_tunai': 'a_'+c.id;
+    const el = document.getElementById(key);
+    if(el) el.value = Number(data.assets[c.id]||0).toLocaleString('id-ID', {maximumFractionDigits:2});
+  });
+}
+
+async function renderHistory(){
+  const wrap = document.getElementById('historyWrap');
+  wrap.innerHTML = '<p class="empty">Memuat data dari Google Sheet...</p>';
+  try{
+    const res = await fetch(CSV_URL + '&cachebust=' + Date.now());
+    if(!res.ok) throw new Error('fetch gagal');
+    const text = await res.text();
+    const allRows = parseCSV(text);
+    const rows = allRows.slice(1).filter(r=>r.length>=6); // lewati header
+    if(!rows.length){
+      wrap.innerHTML = '<p class="empty">Belum ada transaksi tercatat di Google Sheet.</p>';
+      return;
+    }
+    const trs = rows.slice().reverse().map(r=>{
+      const [tanggal,user,jenis,nominal,keterangan,status]=r;
+      const isMasuk = /masuk/i.test(jenis);
+      return `<tr>
+        <td>${tanggal}</td><td>${user}</td>
+        <td class="${isMasuk?'masuk-tag':'keluar-tag'}">${jenis}</td>
+        <td class="num">${rupiah(Number(nominal)||0)}</td>
+        <td>${keterangan}</td><td>${status}</td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Tanggal</th><th>User</th><th>Jenis</th><th>Nominal</th><th>Keterangan</th><th>Status</th></tr></thead>
+      <tbody>${trs}</tbody></table></div>`;
+  }catch(err){
+    wrap.innerHTML = '<p class="empty">Gagal memuat riwayat. Periksa koneksi, atau sheet belum dipublikasikan ke web.</p>';
+  }
+}
+
+function renderAll(){ renderDashboard(); renderAssetForm(); }
+
+// tabs
+document.querySelectorAll('.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    ['tx','assets','history'].forEach(t=>{
+      document.getElementById('tab-'+t).style.display = (t===btn.dataset.tab)?'block':'none';
+    });
+    if(btn.dataset.tab==='history') renderHistory();
+  });
+});
+document.getElementById('refreshHistory').addEventListener('click', renderHistory);
+
+// transaction type toggle
+let txType='masuk';
+const btnMasuk=document.getElementById('btnMasuk'), btnKeluar=document.getElementById('btnKeluar');
+btnMasuk.addEventListener('click',()=>{ txType='masuk'; btnMasuk.classList.add('on'); btnKeluar.classList.remove('on'); });
+btnKeluar.addEventListener('click',()=>{ txType='keluar'; btnKeluar.classList.add('on'); btnMasuk.classList.remove('on'); });
+
+document.getElementById('txDate').valueAsDate = new Date();
+
+document.getElementById('txForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const scriptUrl = getScriptUrl();
+  if(!scriptUrl){
+    alert('Isi dulu URL Web App Google Apps Script di bagian "Sinkronisasi Keluarga" paling bawah.');
+    return;
+  }
+  const submitBtn = e.target.querySelector('.submit');
+  const tanggal = document.getElementById('txDate').value;
+  const user = document.getElementById('txUser').value;
+  const jenis = txType==='masuk' ? 'Masuk' : 'Keluar';
+  const keterangan = document.getElementById('txDesc').value.trim();
+  const nominal = parseNum(document.getElementById('txAmount').value);
+  const status = document.getElementById('txStatus').value;
+  if(!nominal || nominal<=0) return;
+
+  submitBtn.disabled = true; submitBtn.textContent = 'Mengirim...';
+  try{
+    const res = await fetch(scriptUrl, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' }, // hindari CORS preflight
+      body: JSON.stringify({ tanggal, user, jenis, nominal, keterangan, status })
+    });
+    const text = await res.text();
+    let parsed=null; try{ parsed = JSON.parse(text); }catch(_){}
+    if(!res.ok || !parsed || parsed.ok!==true){
+      console.error('Respons Apps Script:', res.status, text);
+      throw new Error('Respons tidak sesuai (status ' + res.status + '). Detail: ' + text.slice(0,200));
+    }
+    if(user==='Saya'){
+      data.assets.tabungan = Number(data.assets.tabungan||0) + (txType==='masuk'? nominal : -nominal);
+      save();
+      renderDashboard();
+    }
+    e.target.reset();
+    document.getElementById('txDate').valueAsDate = new Date();
+    btnMasuk.classList.add('on'); btnKeluar.classList.remove('on'); txType='masuk';
+    alert('Transaksi terkirim ke Google Sheet.');
+  }catch(err){
+    console.error(err);
+    alert('Gagal mengirim ke Google Sheet.\n\n' + (err && err.message ? err.message : 'Cek URL Web App dan koneksi internet.') + '\n\nBuka Console browser (F12) untuk detail lengkap.');
+  }finally{
+    submitBtn.disabled = false; submitBtn.textContent = 'Simpan Transaksi';
+  }
+});
+
+// pengaturan URL apps script
+document.getElementById('scriptUrl').value = getScriptUrl();
+document.getElementById('syncForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  setScriptUrl(document.getElementById('scriptUrl').value.trim());
+  document.getElementById('syncStatus').textContent = 'Tersimpan di perangkat ini.';
+});
+
+document.getElementById('assetForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  try{
+    CATS.forEach(c=>{
+      const key = c.id==='mbanking'?'a_mbanking': c.id==='tunai'?'a_tunai': 'a_'+c.id;
+      const el = document.getElementById(key);
+      if(el) data.assets[c.id] = parseNum(el.value);
+    });
+    save();
+    renderAll();
+    alert('Aset tersimpan. Cek dashboard di atas untuk total terbaru.');
+  }catch(err){
+    console.error(err);
+    alert('Gagal menyimpan aset: ' + (err && err.message ? err.message : 'terjadi kesalahan.'));
+  }
+});
+
+// backup / restore
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'bukukas-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('importBtn').addEventListener('click', ()=> document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(parsed.assets && parsed.transactions){ data = parsed; save(); renderAll(); alert('Data berhasil dipulihkan.'); }
+      else alert('File tidak valid.');
+    }catch(err){ alert('Gagal membaca file.'); }
+  };
+  reader.readAsText(file);
+});
+
+renderAll();
+</script>
+</body>
+</html>
